@@ -1,5 +1,6 @@
 # Import dependencies
 import datetime as dt
+
 import sqlalchemy
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session
@@ -9,7 +10,6 @@ from flask import Flask, jsonify
 
 # Setup engine connection
 engine = create_engine("sqlite:///Resources/hawaii.sqlite")
-
 Base = automap_base()
 Base.prepare(engine, reflect = True)
 
@@ -23,24 +23,23 @@ app = Flask(__name__)
 def home():
     "List all available API routes."
     return(
-        f"Welcome to the Hawaii API!\<br/>"
+        f"Welcome to the Hawaii API!<br/>"
         f"Here you can retrieve weather data to plan your surfing trip.<br/>"
-        f"Available routes:</br>"
-        f"/api/v1.0/precipitation"
-        f"/api/v1.0/stations"
-        f"/api/v1.0/tobs"
-        f"/api/v1.0/<start>"
-        f"/api/v1.0/<start>/<end>"
+        f"Available routes:<br/>"
+        f"/api/v1.0/precipitation<br/>"
+        f"/api/v1.0/stations<br/>"
+        f"/api/v1.0/tobs<br/>"
+        f"/api/v1.0/start/'2017-03-15"
+        f"/api/v1.0/start/'2016-03-15'/end/'2017-03-15'"
     )
 
 @app.route("/api/v1.0/precipitation")
 def precipitation():
     session = Session(engine)
-    
+
     # Return last date
     end_date_query = session.query(Measurement.date).order_by(Measurement.date.desc()).first()
 
-    # Calculate the date 1 year ago from the last data point in the database
     for date in end_date_query:
         date_str = date
         
@@ -48,6 +47,8 @@ def precipitation():
     day = int(date_str[-2:])
     month = int(date_str[5:7])
     end_date = dt.date(year, month, day)
+
+    # Calculate the date 1 year ago from the last data point in the database
     start_date = end_date - dt.timedelta(days = 365)
 
     # Perform a query to retrieve the data and precipitation scores
@@ -58,6 +59,7 @@ def precipitation():
     
     session.close()
 
+    # Return jsonified list of date and precipitation
     all_prcp = []
     for date, prcp in prcp_results:
         prcp_dict = {}
@@ -67,15 +69,92 @@ def precipitation():
 
     return(jsonify(all_prcp))
 
+@app.route("/api/v1.0/stations")
+def stations():
+    session = Session(engine)
 
-# @app.route("/api/v1.0/stations")
+    # Perform a query to count each station's measurements
+    stations_ordered = session.query(Measurement.station, func.count(Measurement.station)).\
+        group_by(Measurement.station).\
+        order_by(func.count(Measurement.station).desc()).\
+        all()
+    session.close()
 
-# @app.route("/api/v1.0/tobs")
+    # Return jsonified list of stations and measurements
+    stations_list = []
+    for station, measurements in stations_ordered:
+        station_dict = {}
+        station_dict['id'] = station
+        station_dict['measurements'] = measurements
+        stations_list.append(station_dict)
+    
+    return(jsonify(stations_list))
+    
 
-# @app.route("/api/v1.0/<start>")
+@app.route("/api/v1.0/tobs")
+def temperatures():
+    session = Session(engine)
 
-# @app.route("/api/v1.0/<start>/<end>")
+    # Query station with most measurements
+    most_active_station = session.query(Measurement.station, func.count(Measurement.station)).\
+        group_by(Measurement.station).\
+        order_by(func.count(Measurement.station).desc()).\
+        first()
 
+    # Query temperatures of most active station
+    temp_summary = session.query(Measurement.date, Measurement.tobs).\
+        filter(Measurement.station == most_active_station)
+
+    session.close()
+
+    # Return jsonified list of stations and measurements
+    temp_list = []
+    for temp, date in temp_summary:
+        temp_dict = {}
+        temp_dict['date'] = date
+        temp_dict['temp'] = temp
+        temp_list.append(temp_dict)
+
+@app.route("/api/v1.0/start/<start>")
+def startDate(start):
+    session = Session(engine)
+
+    # Query min, avg and minimum temperatures after start date
+    temp_summary = session.query(func.min(Measurement.tobs),
+        func.max(Measurement.tobs),
+        func.avg(Measurement.tobs)).\
+        filter(Measurement.date >= start)
+
+    session.close()
+    
+    for record in temp_summary:
+        min_temp, max_temp, avg_temp = record
+
+    # Return jsonified temperature summary
+    temp_dict = {'Min T': min_temp, 'Max T': max_temp, 'Avg T': avg_temp}
+    
+    return jsonify(temp_dict)
+
+@app.route("/api/v1.0/start/<start>/end/<end>")
+def startEndDate(start, end):
+    session = Session(engine)
+
+    # Query min, avg and minimum temperatures after start date and before end date
+    temp_summary = session.query(func.min(Measurement.tobs),
+        func.max(Measurement.tobs),
+        func.avg(Measurement.tobs)).\
+        filter(Measurement.date >= start).\
+        filter(Measurement.date <= end)
+
+    session.close()
+
+    for record in temp_summary:
+        min_temp, max_temp, avg_temp = record
+
+    # Return jsonified temperature summary
+    temp_dict = {'Min T': min_temp, 'Max T': max_temp, 'Avg T': avg_temp}
+    
+    return jsonify(temp_dict)
 
 if __name__ == '__main__':
     app.run(debug = True)
