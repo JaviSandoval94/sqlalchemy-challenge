@@ -29,8 +29,8 @@ def home():
         f"/api/v1.0/precipitation<br/>"
         f"/api/v1.0/stations<br/>"
         f"/api/v1.0/tobs<br/>"
-        f"/api/v1.0/start/'2017-03-15"
-        f"/api/v1.0/start/'2016-03-15'/end/'2017-03-15'"
+        f"/api/v1.0/start/2017-03-15<br/>"
+        f"/api/v1.0/start/2016-03-15/end/2017-03-15"
     )
 
 @app.route("/api/v1.0/precipitation")
@@ -101,19 +101,23 @@ def temperatures():
         order_by(func.count(Measurement.station).desc()).\
         first()
 
+    most_active_id, most_active_count = most_active_station
+
     # Query temperatures of most active station
     temp_summary = session.query(Measurement.date, Measurement.tobs).\
-        filter(Measurement.station == most_active_station)
+        filter(Measurement.station == most_active_id)
 
     session.close()
 
     # Return jsonified list of stations and measurements
     temp_list = []
-    for temp, date in temp_summary:
+    for date, temp in temp_summary:
         temp_dict = {}
         temp_dict['date'] = date
         temp_dict['temp'] = temp
         temp_list.append(temp_dict)
+
+    return(jsonify(temp_list))
 
 @app.route("/api/v1.0/start/<start>")
 def startDate(start):
